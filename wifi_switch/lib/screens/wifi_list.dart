@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:wifi_scan/wifi_scan.dart';
 import 'dart:async';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:plugin_wifi_connect/plugin_wifi_connect.dart';
+import 'package:wifi_iot/wifi_iot.dart';
 import 'package:network_info_plus/network_info_plus.dart'; // Import the package
 
 class WifiListScreen extends StatefulWidget {
@@ -14,6 +14,8 @@ class _WifiListScreenState extends State<WifiListScreen> {
   StreamSubscription<List<WiFiAccessPoint>>? subscription;
   List<WiFiAccessPoint> _wifiList = [];
   String _statusLog = "";
+  List<String> _debugLogs = []; // List to hold debug logs
+
 
   // Store the current connected Wi-Fi access point's details
   String? _currentSSID;
@@ -23,6 +25,26 @@ class _WifiListScreenState extends State<WifiListScreen> {
   WiFiAccessPoint? _currentAccessPoint; // Track the current access point
 
   final NetworkInfo _networkInfo = NetworkInfo(); // NetworkInfo instance
+
+  // Function to log messages
+  void _logDebug(String message) {
+    setState(() {
+      _debugLogs.add(message);
+    });
+  }
+
+  void _log(String message) {
+    setState(() {
+      _statusLog = message;
+    });
+  }
+
+  void _update(String message) {
+    setState(() {
+      _statusLog = message;
+      _debugLogs.add(message);
+    });
+  }
 
   @override
   void initState() {
@@ -38,7 +60,7 @@ class _WifiListScreenState extends State<WifiListScreen> {
     try {
       // Request necessary permissions and fetch Wi-Fi details
       if (await Permission.locationWhenInUse.request().isGranted) {
-        wifiName = await _networkInfo.getWifiName();
+        wifiName = (await _networkInfo.getWifiName());
         wifiBSSID = await _networkInfo.getWifiBSSID();
       } else {
         wifiName = 'Unauthorized to get Wifi Name';
@@ -63,7 +85,7 @@ class _WifiListScreenState extends State<WifiListScreen> {
 
     // Update current connected Wi-Fi info
     setState(() {
-      _currentSSID = wifiName;
+      _currentSSID = wifiName?.replaceAll('"', '');
       _currentBSSID = wifiBSSID;
       _currentIP = wifiIPv4;
       _currentIPv6 = wifiIPv6;
@@ -148,19 +170,20 @@ class _WifiListScreenState extends State<WifiListScreen> {
 
     // Find the current Wi-Fi access point in the list
     for (var network in _wifiList) {
+      _log("Comparing access point ${_currentSSID} : ${network.ssid}, ${_currentBSSID} : ${network.bssid}");
       if (network.ssid == _currentSSID && network.bssid == _currentBSSID) {
         // Update current Wi-Fi info with the matching SSID and BSSID
+        _log("Found connected to ${network.ssid}");
         setState(() {
           _currentAccessPoint = network; // Track the current connected access point
-          _statusLog = "Found connected to ${network.ssid}";
         });
         return; // Once found, exit the loop
       }
     }
     setState(() {
       _currentAccessPoint = null; // Track the current connected access point
-      _statusLog = "Found no connection currently!";
     });
+    _log("Found no connection currently! ");
   }
 
   // Helper function to determine Wi-Fi standard based on the WiFiAccessPoint standard property
@@ -180,28 +203,20 @@ class _WifiListScreenState extends State<WifiListScreen> {
   // Function to connect to a Wi-Fi network
   Future<void> _connectToWiFi(WiFiAccessPoint network) async {
     try {
-      setState(() {
-        _statusLog = "Connecting to ${network.ssid}...";
-      });
+      _update("Connecting to ${network.ssid}...");
 
       // Connect to the Wi-Fi network using plugin_wifi_connect
-      final result = await PluginWifiConnect.connect(network.ssid!); // Provide the password here if it's required
+      // final result = await PluginWifiConnect.connect(network.ssid!); // Provide the password here if it's required
+      var result = await WiFiForIoTPlugin.connect(network.ssid, bssid: network.bssid);
 
-      if (result == true) {
-        setState(() {
-          _statusLog = "Successfully connected to ${network.ssid}!";
-        });
-
+      if (result) {
+        _update("Successfully connected to ${network.ssid}!");
         
       } else {
-        setState(() {
-          _statusLog = "Failed to connect to ${network.ssid}.";
-        });
+        _update("Failed to connect to ${network.ssid}.");
       }
     } catch (e) {
-      setState(() {
-        _statusLog = "Error connecting to ${network.ssid}: $e";
-      });
+      _update("Error connecting to ${network.ssid}: $e");
     }
     // Re-fetch the current connected Wi-Fi info after a successful connection
     _initNetworkInfo();
@@ -291,6 +306,18 @@ class _WifiListScreenState extends State<WifiListScreen> {
                         onPressed: () => _connectToWiFi(network),
                       ),
                     ),
+                  );
+                },
+              ),
+            ),
+            // Display Debug Logs
+            SizedBox(height: 3),
+            Expanded(
+              child: ListView.builder(
+                itemCount: _debugLogs.length,
+                itemBuilder: (context, index) {
+                  return ListTile(
+                    title: Text(_debugLogs[index]),
                   );
                 },
               ),
