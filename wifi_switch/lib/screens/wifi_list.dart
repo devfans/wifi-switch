@@ -152,10 +152,15 @@ class _WifiListScreenState extends State<WifiListScreen> {
         // Update current Wi-Fi info with the matching SSID and BSSID
         setState(() {
           _currentAccessPoint = network; // Track the current connected access point
+          _statusLog = "Found connected to ${network.ssid}";
         });
-        break; // Once found, exit the loop
+        return; // Once found, exit the loop
       }
     }
+    setState(() {
+      _currentAccessPoint = null; // Track the current connected access point
+      _statusLog = "Found no connection currently!";
+    });
   }
 
   // Helper function to determine Wi-Fi standard based on the WiFiAccessPoint standard property
